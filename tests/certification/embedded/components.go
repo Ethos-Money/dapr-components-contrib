@@ -18,6 +18,7 @@ import (
 	"github.com/dapr/kit/logger"
 
 	// Name resolutions.
+	nrCloudMap "github.com/dapr/components-contrib/nameresolution/aws/cloudmap"
 	nrConsul "github.com/dapr/components-contrib/nameresolution/consul"
 	nrKubernetes "github.com/dapr/components-contrib/nameresolution/kubernetes"
 	nrMdns "github.com/dapr/components-contrib/nameresolution/mdns"
@@ -31,6 +32,7 @@ func CommonComponents(log logger.Logger) []Option {
 	reg.RegisterComponent(nrMdns.NewResolver, "mdns")
 	reg.RegisterComponent(nrKubernetes.NewResolver, "kubernetes")
 	reg.RegisterComponent(nrConsul.NewResolver, "consul")
+	reg.RegisterComponent(nrCloudMap.NewResolver, "aws.cloudmap")
 	return []Option{
 		func(cfg *runtime.Config) {
 			cfg.Registry = cfg.Registry.WithNameResolutions(reg)

@@ -449,3 +449,5 @@ replace dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/kit => ../kit
+
+replace github.com/dapr/components-contrib => ../components-contrib

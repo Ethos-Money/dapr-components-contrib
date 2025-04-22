@@ -151,8 +151,10 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		var addr string
 		if ipv4, ok := instance.Attributes["AWS_INSTANCE_IPV4"]; ok && ipv4 != nil {
 			addr = *ipv4
-		} else if host, ok := instance.Attributes["AWS_INSTANCE_HOSTNAME"]; ok && host != nil {
-			addr = *host
+		} else if ipv6, ok := instance.Attributes["AWS_INSTANCE_IPV6"]; ok && ipv6 != nil {
+			addr = *ipv6
+		} else if cname, ok := instance.Attributes["AWS_INSTANCE_CNAME"]; ok && cname != nil {
+			addr = *cname
 		} else {
 			continue
 		}

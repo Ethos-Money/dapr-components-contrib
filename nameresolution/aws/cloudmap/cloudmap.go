@@ -61,7 +61,6 @@ func (r *Resolver) Init(ctx context.Context, metadata nameresolution.Metadata) e
 	// Initialize AWS auth provider
 	opts := awsAuth.Options{
 		Logger:       r.logger,
-		Properties:   metadata.Configuration.(map[string]string),
 		Region:       meta.Region,
 		Endpoint:     meta.Endpoint,
 		AccessKey:    meta.AccessKey,

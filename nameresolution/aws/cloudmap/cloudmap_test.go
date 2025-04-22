@@ -96,7 +96,7 @@ func TestCloudMapResolver(t *testing.T) {
 		r.authProvider = &mockAuthProvider{}
 
 		err := r.Init(context.Background(), nameresolution.Metadata{
-			Configuration: map[string]string{
+			Configuration: map[string]interface{}{
 				"namespaceId": "ns-test",
 				"region":      "us-west-2",
 			},
@@ -123,7 +123,7 @@ func TestCloudMapResolver(t *testing.T) {
 		r.authProvider = &mockAuthProvider{}
 
 		err := r.Init(context.Background(), nameresolution.Metadata{
-			Configuration: map[string]string{
+			Configuration: map[string]interface{}{
 				"namespaceName": "test-namespace",
 				"region":        "us-west-2",
 			},
@@ -137,7 +137,7 @@ func TestCloudMapResolver(t *testing.T) {
 	t.Run("init with missing namespace", func(t *testing.T) {
 		r := NewResolver(logger.NewLogger("test")).(*Resolver)
 		err := r.Init(context.Background(), nameresolution.Metadata{
-			Configuration: map[string]string{
+			Configuration: map[string]interface{}{
 				"region": "us-west-2",
 			},
 		})

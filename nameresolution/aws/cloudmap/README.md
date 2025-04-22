@@ -28,6 +28,9 @@ spec:
       # Optional: AWS region and endpoint configuration
       region: "us-west-2"
       endpoint: "http://localhost:4566"  # Optional: Custom endpoint for testing
+
+      # Optional: Dapr configuration
+      defaultDaprPort: 3500  # Default port for Dapr sidecar if not specified in instance attributes
 ```
 
 ## Specification
@@ -75,10 +78,20 @@ The AWS credentials must have the following permissions:
 | namespaceId | string | One of namespaceName or namespaceId | "" | The ID of your AWS CloudMap namespace |
 | region | string | N | "" | AWS region. If not provided, will be determined from environment or instance metadata |
 | endpoint | string | N | "" | Custom endpoint for AWS CloudMap API. Useful for testing with LocalStack |
+| defaultDaprPort | number | N | 3500 | Default port for Dapr sidecar if not specified in instance attributes |
 
 ### Service Registration
 
-To use this name resolver, your services must be registered in AWS CloudMap. When registering instances, ensure they have either the `AWS_INSTANCE_IPV4` or `AWS_INSTANCE_HOSTNAME` attribute set. The component will use these attributes to resolve service addresses.
+To use this name resolver, your services must be registered in AWS CloudMap. When registering instances, ensure they have the following attributes:
+
+1. Required: One of these address attributes:
+   - `AWS_INSTANCE_IPV4`: IPv4 address of the instance
+   - `AWS_INSTANCE_IPV6`: IPv6 address of the instance
+   - `AWS_INSTANCE_CNAME`: Hostname of the instance
+
+2. Optional: Dapr sidecar port attribute:
+   - `DAPR_PORT`: The port that the Dapr sidecar is listening on
+   - If not specified, the component will use the `defaultDaprPort` from configuration (defaults to 3500)
 
 The resolver will only return healthy instances (those with `HEALTHY` status) to ensure reliable service communication.
 
@@ -86,7 +99,7 @@ Example instance attributes:
 ```json
 {
     "AWS_INSTANCE_IPV4": "10.0.0.1",
-    "AWS_INSTANCE_PORT": "8080"
+    "DAPR_PORT": "3500"
 }
 ```
 
@@ -95,7 +108,7 @@ or
 ```json
 {
     "AWS_INSTANCE_HOSTNAME": "myservice.example.com",
-    "AWS_INSTANCE_PORT": "8080"
+    "DAPR_PORT": "3500"
 }
 ```
 
@@ -114,6 +127,7 @@ spec:
     configuration:
       namespaceName: "my-namespace"
       region: "us-west-2"
+      defaultDaprPort: 3500  # Optional: use custom default port
 ```
 
 ### Local Development with LocalStack

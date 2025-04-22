@@ -32,17 +32,19 @@ import (
 
 // Resolver is the AWS CloudMap name resolver.
 type Resolver struct {
-	authProvider  awsAuth.Provider
-	client        servicediscoveryiface.ServiceDiscoveryAPI
-	logger        logger.Logger
-	namespaceID   string
-	namespaceName string
+	authProvider    awsAuth.Provider
+	client          servicediscoveryiface.ServiceDiscoveryAPI
+	logger          logger.Logger
+	namespaceID     string
+	namespaceName   string
+	defaultDaprPort int
 }
 
 // NewResolver creates a new AWS CloudMap name resolver.
 func NewResolver(logger logger.Logger) nameresolution.Resolver {
 	return &Resolver{
-		logger: logger,
+		logger:          logger,
+		defaultDaprPort: defaultDaprPort,
 	}
 }
 
@@ -56,6 +58,11 @@ func (r *Resolver) Init(ctx context.Context, metadata nameresolution.Metadata) e
 
 	if err := meta.Validate(); err != nil {
 		return fmt.Errorf("invalid metadata: %w", err)
+	}
+
+	// Set default Dapr port if specified
+	if meta.DefaultDaprPort > 0 {
+		r.defaultDaprPort = meta.DefaultDaprPort
 	}
 
 	// Initialize AWS auth provider
@@ -124,25 +131,22 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		HealthStatus:  aws.String(servicediscovery.HealthStatusHealthy),
 	}
 
-	// Add port if specified
-	if req.Port > 0 {
-		input.QueryParameters = map[string]*string{
-			"port": aws.String(strconv.Itoa(req.Port)),
-		}
-	}
+	r.logger.Debugf("Discovering instances in CloudMap with input: namespace=%s, service=%s, healthStatus=%s",
+		*input.NamespaceName, *input.ServiceName, *input.HealthStatus)
 
 	// Call CloudMap API
 	result, err := r.client.DiscoverInstancesWithContext(ctx, input)
 	if err != nil {
-		return nil, fmt.Errorf("failed to discover instances: %w", err)
+		return nil, fmt.Errorf("failed to discover CloudMap instances: %w", err)
 	}
 
-	r.logger.Debugf("Discovered %d instances for service %s", len(result.Instances), req.ID)
+	r.logger.Debugf("Raw CloudMap response: found %d instances for service %s", len(result.Instances), req.ID)
 
 	// Extract addresses from instances
 	addresses := make([]string, 0, len(result.Instances))
 	for _, instance := range result.Instances {
 		if instance.InstanceId == nil || instance.Attributes == nil {
+			r.logger.Warnf("Skipping CloudMap instance with nil ID or attributes")
 			continue
 		}
 
@@ -150,20 +154,42 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		var addr string
 		if ipv4, ok := instance.Attributes["AWS_INSTANCE_IPV4"]; ok && ipv4 != nil {
 			addr = *ipv4
+			r.logger.Debugf("Found CloudMap instance %s with IPv4: %s", *instance.InstanceId, addr)
 		} else if ipv6, ok := instance.Attributes["AWS_INSTANCE_IPV6"]; ok && ipv6 != nil {
 			addr = *ipv6
+			r.logger.Debugf("Found CloudMap instance %s with IPv6: %s", *instance.InstanceId, addr)
 		} else if cname, ok := instance.Attributes["AWS_INSTANCE_CNAME"]; ok && cname != nil {
 			addr = *cname
+			r.logger.Debugf("Found CloudMap instance %s with CNAME: %s", *instance.InstanceId, addr)
 		} else {
+			r.logger.Warnf("Skipping CloudMap instance %s with no valid address attributes", *instance.InstanceId)
 			continue
 		}
 
-		// Add port if present in attributes
-		if port, ok := instance.Attributes["AWS_INSTANCE_PORT"]; ok && port != nil {
-			addr = fmt.Sprintf("%s:%s", addr, *port)
+		// First try to get port from DAPR_PORT attribute
+		var port int
+		if daprPort, ok := instance.Attributes["DAPR_PORT"]; ok && daprPort != nil {
+			r.logger.Debugf("Found DAPR_PORT attribute for instance %s: %s", *instance.InstanceId, *daprPort)
+			port = r.defaultDaprPort // Set default in case of parsing error
+			if p, err := strconv.Atoi(*daprPort); err == nil {
+				port = p
+			} else {
+				r.logger.Warnf("Invalid DAPR_PORT value for instance %s: %s, using default port %d", *instance.InstanceId, *daprPort, r.defaultDaprPort)
+			}
+		} else {
+			// Use default port if DAPR_PORT not found
+			port = r.defaultDaprPort
+			r.logger.Debugf("No DAPR_PORT found for instance %s, using default port %d", *instance.InstanceId, port)
 		}
 
+		addr = fmt.Sprintf("%s:%d", addr, port)
 		addresses = append(addresses, addr)
+	}
+
+	r.logger.Debugf("Final resolved CloudMap addresses for service %s: %v", req.ID, addresses)
+
+	if len(addresses) == 0 {
+		r.logger.Warnf("No CloudMap addresses found for service %s - this could indicate that no healthy instances exist, or instances are missing required attributes", req.ID)
 	}
 
 	return addresses, nil

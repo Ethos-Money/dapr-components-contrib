@@ -105,6 +105,31 @@ func TestCloudMapResolver(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "ns-test", r.namespaceID)
 		assert.Equal(t, "test-namespace", r.namespaceName)
+		assert.Equal(t, defaultDaprPort, r.defaultDaprPort)
+	})
+
+	t.Run("init with custom default port", func(t *testing.T) {
+		r := NewResolver(logger.NewLogger("test")).(*Resolver)
+		mockClient := &mockServiceDiscoveryAPI{
+			getNamespaceResp: &servicediscovery.GetNamespaceOutput{
+				Namespace: &servicediscovery.Namespace{
+					Name: aws.String("test-namespace"),
+				},
+			},
+		}
+		r.client = mockClient
+		r.authProvider = &mockAuthProvider{}
+
+		err := r.Init(context.Background(), nameresolution.Metadata{
+			Configuration: map[string]interface{}{
+				"namespaceId":     "ns-test",
+				"region":          "us-west-2",
+				"defaultDaprPort": 5000,
+			},
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, 5000, r.defaultDaprPort)
 	})
 
 	t.Run("init with valid namespace name", func(t *testing.T) {
@@ -155,7 +180,7 @@ func TestCloudMapResolver(t *testing.T) {
 						InstanceId: aws.String("i-1234"),
 						Attributes: map[string]*string{
 							"AWS_INSTANCE_IPV4": aws.String("10.0.0.1"),
-							"AWS_INSTANCE_PORT": aws.String("8080"),
+							"DAPR_PORT":         aws.String("8080"),
 						},
 					},
 				},
@@ -206,6 +231,58 @@ func TestCloudMapResolver(t *testing.T) {
 		assert.Contains(t, err.Error(), "failed to discover instances")
 	})
 
+	t.Run("resolve service with DAPR_PORT", func(t *testing.T) {
+		r := NewResolver(logger.NewLogger("test")).(*Resolver)
+		mockClient := &mockServiceDiscoveryAPI{
+			discoverInstancesResp: &servicediscovery.DiscoverInstancesOutput{
+				Instances: []*servicediscovery.HttpInstanceSummary{
+					{
+						InstanceId: aws.String("i-1234"),
+						Attributes: map[string]*string{
+							"AWS_INSTANCE_IPV4": aws.String("10.0.0.1"),
+							"DAPR_PORT":         aws.String("5000"),
+						},
+					},
+				},
+			},
+		}
+		r.client = mockClient
+		r.namespaceName = "test-namespace"
+
+		addr, err := r.ResolveID(context.Background(), nameresolution.ResolveRequest{
+			ID: "test-service",
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, "10.0.0.1:5000", addr)
+	})
+
+	t.Run("resolve service with default port", func(t *testing.T) {
+		r := NewResolver(logger.NewLogger("test")).(*Resolver)
+		mockClient := &mockServiceDiscoveryAPI{
+			discoverInstancesResp: &servicediscovery.DiscoverInstancesOutput{
+				Instances: []*servicediscovery.HttpInstanceSummary{
+					{
+						InstanceId: aws.String("i-1234"),
+						Attributes: map[string]*string{
+							"AWS_INSTANCE_IPV4": aws.String("10.0.0.1"),
+						},
+					},
+				},
+			},
+		}
+		r.client = mockClient
+		r.namespaceName = "test-namespace"
+		r.defaultDaprPort = 3500
+
+		addr, err := r.ResolveID(context.Background(), nameresolution.ResolveRequest{
+			ID: "test-service",
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, "10.0.0.1:3500", addr)
+	})
+
 	t.Run("close with auth provider", func(t *testing.T) {
 		r := NewResolver(logger.NewLogger("test")).(*Resolver)
 		mockAuthProvider := &mockAuthProvider{}
@@ -224,11 +301,12 @@ func TestResolve(t *testing.T) {
 		req               nameresolution.ResolveRequest
 		mockResponse      *servicediscovery.DiscoverInstancesOutput
 		mockError         error
+		defaultPort       int
 		expectedAddresses []string
 		expectedError     bool
 	}{
 		{
-			name: "successful resolution",
+			name: "successful resolution with DAPR_PORT",
 			req: nameresolution.ResolveRequest{
 				ID: "test-service",
 			},
@@ -238,19 +316,44 @@ func TestResolve(t *testing.T) {
 						InstanceId: aws.String("i-1234"),
 						Attributes: map[string]*string{
 							"AWS_INSTANCE_IPV4": aws.String("192.0.2.1"),
-							"AWS_INSTANCE_PORT": aws.String("8080"),
+							"DAPR_PORT":         aws.String("5000"),
 						},
 					},
 					{
 						InstanceId: aws.String("i-5678"),
 						Attributes: map[string]*string{
 							"AWS_INSTANCE_IPV4": aws.String("192.0.2.2"),
-							"AWS_INSTANCE_PORT": aws.String("8080"),
+							"DAPR_PORT":         aws.String("5000"),
 						},
 					},
 				},
 			},
-			expectedAddresses: []string{"192.0.2.1:8080", "192.0.2.2:8080"},
+			expectedAddresses: []string{"192.0.2.1:5000", "192.0.2.2:5000"},
+			expectedError:     false,
+		},
+		{
+			name: "successful resolution with default port",
+			req: nameresolution.ResolveRequest{
+				ID: "test-service",
+			},
+			defaultPort: 3500,
+			mockResponse: &servicediscovery.DiscoverInstancesOutput{
+				Instances: []*servicediscovery.HttpInstanceSummary{
+					{
+						InstanceId: aws.String("i-1234"),
+						Attributes: map[string]*string{
+							"AWS_INSTANCE_IPV4": aws.String("192.0.2.1"),
+						},
+					},
+					{
+						InstanceId: aws.String("i-5678"),
+						Attributes: map[string]*string{
+							"AWS_INSTANCE_IPV4": aws.String("192.0.2.2"),
+						},
+					},
+				},
+			},
+			expectedAddresses: []string{"192.0.2.1:3500", "192.0.2.2:3500"},
 			expectedError:     false,
 		},
 		{
@@ -272,9 +375,10 @@ func TestResolve(t *testing.T) {
 			}
 
 			resolver := &Resolver{
-				client:        mockClient,
-				logger:        logger.NewLogger("test"),
-				namespaceName: "test-namespace",
+				client:          mockClient,
+				logger:          logger.NewLogger("test"),
+				namespaceName:   "test-namespace",
+				defaultDaprPort: tc.defaultPort,
 			}
 
 			addresses, err := resolver.ResolveID(context.Background(), tc.req)

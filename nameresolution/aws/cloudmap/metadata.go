@@ -35,11 +35,15 @@ type cloudMapMetadata struct {
 	EnableCaching bool   `json:"enableCaching"` // Enable/disable address caching
 	CacheTTL      string `json:"cacheTTL"`      // Cache TTL duration (default: "60s")
 	MaxCacheSize  int    `json:"maxCacheSize"`  // Maximum number of cached entries (default: 1000)
+
+	// Dapr Configuration
+	DefaultDaprPort int `json:"defaultDaprPort"` // Default Dapr sidecar port if not specified in instance attributes
 }
 
 const (
 	defaultCacheTTL     = time.Second * 60
 	defaultMaxCacheSize = 1000
+	defaultDaprPort     = 3500
 )
 
 func (m *cloudMapMetadata) Validate() error {

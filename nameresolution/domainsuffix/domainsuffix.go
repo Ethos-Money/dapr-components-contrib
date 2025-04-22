@@ -20,19 +20,24 @@ import (
 
 	"github.com/dapr/components-contrib/metadata"
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/kit/logger"
 	kitmd "github.com/dapr/kit/metadata"
 )
 
 type DomainSuffixResolver struct {
 	domainSuffix string
+	logger       logger.Logger
 }
 
 type domainSuffixMetadata struct {
 	DomainSuffix string `mapstructure:"domainSuffix"`
 }
 
-func NewDomainSuffixResolver() nr.Resolver {
-	return &DomainSuffixResolver{}
+// NewResolver creates a new Domain Suffix name resolver.
+func NewResolver(logger logger.Logger) nr.Resolver {
+	return &DomainSuffixResolver{
+		logger: logger,
+	}
 }
 
 func (r *DomainSuffixResolver) Init(ctx context.Context, metadata nr.Metadata) error {
@@ -70,4 +75,4 @@ func (r *DomainSuffixResolver) GetComponentMetadata() (metadataInfo metadata.Met
 	metadataStruct := domainSuffixMetadata{}
 	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(metadataStruct), &metadataInfo, metadata.NameResolutionType)
 	return
-} 
+}

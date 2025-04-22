@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/kit/logger"
 )
 
 func TestInit(t *testing.T) {
@@ -33,7 +34,7 @@ func TestInit(t *testing.T) {
 			name: "valid metadata with domain suffix",
 			metadata: nr.Metadata{
 				Configuration: map[string]string{
-					"domainSuffix": "example.dev",
+					"domainSuffix": "-my.example.dev",
 				},
 			},
 		},
@@ -56,7 +57,7 @@ func TestInit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewDomainSuffixResolver()
+			r := NewResolver(logger.NewLogger("test"))
 			err := r.Init(context.Background(), tt.metadata)
 
 			if tt.expectedError != "" {
@@ -105,7 +106,7 @@ func TestResolveID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := NewDomainSuffixResolver()
+			r := NewResolver(logger.NewLogger("test"))
 			err := r.Init(context.Background(), nr.Metadata{
 				Configuration: map[string]string{
 					"domainSuffix": tt.domainSuffix,
@@ -127,7 +128,7 @@ func TestResolveID(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	r := NewDomainSuffixResolver()
+	r := NewResolver(logger.NewLogger("test"))
 	err := r.Close()
 	require.NoError(t, err)
-} 
+}

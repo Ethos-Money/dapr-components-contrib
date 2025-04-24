@@ -31,25 +31,6 @@ When configured with `format: "service-{appid}.default.svc.cluster.local"`, the 
 - Service ID "myapp" → "service-myapp.default.svc.cluster.local"
 - Service ID "frontend" → "service-frontend.default.svc.cluster.local"
 
-### Multiple Placeholder Usage
-
-The `{appid}` placeholder can be used multiple times in the format string if needed:
-
-```yaml
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: appconfig
-spec:
-  nameResolution:
-    component: "nameformat"
-    configuration:
-      format: "{appid}-service-{appid}.example.com"
-```
-
-With this configuration:
-- Service ID "myapp" → "myapp-service-myapp.example.com"
-- Service ID "frontend" → "frontend-service-frontend.example.com"
 
 ## Notes
 

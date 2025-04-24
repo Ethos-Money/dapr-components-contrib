@@ -11,12 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package domainsuffix
+package nameformat
 
 import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/dapr/components-contrib/metadata"
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -24,57 +25,63 @@ import (
 	kitmd "github.com/dapr/kit/metadata"
 )
 
-type DomainSuffixResolver struct {
-	domainSuffix string
-	logger       logger.Logger
+type NameFormatResolver struct {
+	format string
+	logger logger.Logger
 }
 
-type domainSuffixMetadata struct {
-	DomainSuffix string `mapstructure:"domainSuffix"`
+type nameFormatMetadata struct {
+	Format string `mapstructure:"format"`
 }
 
-// NewResolver creates a new Domain Suffix name resolver.
+// NewResolver creates a new Name Format resolver.
 func NewResolver(logger logger.Logger) nr.Resolver {
-	return &DomainSuffixResolver{
+	return &NameFormatResolver{
 		logger: logger,
 	}
 }
 
-func (r *DomainSuffixResolver) Init(ctx context.Context, metadata nr.Metadata) error {
-	var meta domainSuffixMetadata
+func (r *NameFormatResolver) Init(ctx context.Context, metadata nr.Metadata) error {
+	var meta nameFormatMetadata
 	err := kitmd.DecodeMetadata(metadata.Configuration, &meta)
 	if err != nil {
 		return fmt.Errorf("failed to decode metadata: %w", err)
 	}
 
-	if meta.DomainSuffix == "" {
-		return fmt.Errorf("domainSuffix is required in metadata")
+	if meta.Format == "" {
+		return fmt.Errorf("format is required in metadata")
 	}
 
-	// Store the domain suffix
-	r.domainSuffix = meta.DomainSuffix
+	// Validate that the format contains the appid placeholder
+	if !strings.Contains(meta.Format, "{appid}") {
+		return fmt.Errorf("format must contain {appid} placeholder")
+	}
+
+	// Store the format string
+	r.format = meta.Format
 
 	return nil
 }
 
-func (r *DomainSuffixResolver) ResolveID(ctx context.Context, req nr.ResolveRequest) (string, error) {
+func (r *NameFormatResolver) ResolveID(ctx context.Context, req nr.ResolveRequest) (string, error) {
 	if req.ID == "" {
 		return "", fmt.Errorf("empty ID not allowed")
 	}
 
-	resolvedAddress := fmt.Sprintf("%s%s", req.ID, r.domainSuffix)
+	// Replace {appid} with the actual ID
+	resolvedAddress := strings.Replace(r.format, "{appid}", req.ID, -1)
 	r.logger.Debugf("Resolved app ID '%s' to address: %s", req.ID, resolvedAddress)
 	return resolvedAddress, nil
 }
 
 // Close implements io.Closer
-func (r *DomainSuffixResolver) Close() error {
+func (r *NameFormatResolver) Close() error {
 	return nil
 }
 
 // GetComponentMetadata returns the metadata of the component
-func (r *DomainSuffixResolver) GetComponentMetadata() (metadataInfo metadata.MetadataMap) {
-	metadataStruct := domainSuffixMetadata{}
+func (r *NameFormatResolver) GetComponentMetadata() (metadataInfo metadata.MetadataMap) {
+	metadataStruct := nameFormatMetadata{}
 	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(metadataStruct), &metadataInfo, metadata.NameResolutionType)
 	return
 }

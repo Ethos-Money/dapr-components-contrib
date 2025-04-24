@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package domainsuffix
+package nameformat
 
 import (
 	"context"
@@ -31,27 +31,36 @@ func TestInit(t *testing.T) {
 		expectedError string
 	}{
 		{
-			name: "valid metadata with domain suffix",
+			name: "valid metadata with format",
 			metadata: nr.Metadata{
 				Configuration: map[string]string{
-					"domainSuffix": "-my.example.dev",
+					"format": "service-{appid}.default.svc.cluster.local",
 				},
 			},
 		},
 		{
-			name: "valid metadata with domain suffix with leading dot",
+			name: "valid metadata with multiple placeholders",
 			metadata: nr.Metadata{
 				Configuration: map[string]string{
-					"domainSuffix": ".example.dev",
+					"format": "{appid}-service-{appid}.example.com",
 				},
 			},
 		},
 		{
-			name: "missing domain suffix",
+			name: "missing format",
 			metadata: nr.Metadata{
 				Configuration: map[string]string{},
 			},
-			expectedError: "domainSuffix is required in metadata",
+			expectedError: "format is required in metadata",
+		},
+		{
+			name: "invalid format without placeholder",
+			metadata: nr.Metadata{
+				Configuration: map[string]string{
+					"format": "service.example.com",
+				},
+			},
+			expectedError: "must contain {appid} placeholder",
 		},
 	}
 
@@ -73,30 +82,30 @@ func TestInit(t *testing.T) {
 func TestResolveID(t *testing.T) {
 	tests := []struct {
 		name           string
-		domainSuffix   string
+		format         string
 		request        nr.ResolveRequest
 		expectedResult string
 		expectedError  string
 	}{
 		{
-			name:         "valid app name",
-			domainSuffix: "-my.example.dev",
+			name:   "valid app name with single placeholder",
+			format: "service-{appid}.default.svc.cluster.local",
 			request: nr.ResolveRequest{
-				ID: "some-app",
+				ID: "myapp",
 			},
-			expectedResult: "some-app-my.example.dev",
+			expectedResult: "service-myapp.default.svc.cluster.local",
 		},
 		{
-			name:         "valid app name with leading dot in suffix",
-			domainSuffix: ".example.dev",
+			name:   "valid app name with multiple placeholders",
+			format: "{appid}-service-{appid}.example.com",
 			request: nr.ResolveRequest{
-				ID: "some-app",
+				ID: "frontend",
 			},
-			expectedResult: "some-app.example.dev",
+			expectedResult: "frontend-service-frontend.example.com",
 		},
 		{
-			name:         "empty app name",
-			domainSuffix: "example.dev",
+			name:   "empty app name",
+			format: "service-{appid}.example.com",
 			request: nr.ResolveRequest{
 				ID: "",
 			},
@@ -109,7 +118,7 @@ func TestResolveID(t *testing.T) {
 			r := NewResolver(logger.NewLogger("test"))
 			err := r.Init(context.Background(), nr.Metadata{
 				Configuration: map[string]string{
-					"domainSuffix": tt.domainSuffix,
+					"format": tt.format,
 				},
 			})
 			require.NoError(t, err)

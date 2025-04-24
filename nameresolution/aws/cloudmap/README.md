@@ -99,22 +99,14 @@ Example instance attributes:
 ```json
 {
     "AWS_INSTANCE_IPV4": "10.0.0.1",
-    "DAPR_PORT": "3500"
+    "DAPR_PORT": "50002"
 }
 ```
 
-or
-
-```json
-{
-    "AWS_INSTANCE_HOSTNAME": "myservice.example.com",
-    "DAPR_PORT": "3500"
-}
-```
 
 ## Example Usage
 
-### Basic Configuration
+### Minimal Configuration
 
 ```yaml
 apiVersion: dapr.io/v1alpha1
@@ -125,9 +117,8 @@ spec:
   nameResolution:
     component: "aws.cloudmap"
     configuration:
-      namespaceName: "my-namespace"
-      region: "us-west-2"
-      defaultDaprPort: 3500  # Optional: use custom default port
+      namespaceName: "mynamespace.dev"
+      defaultDaprPort: 50002
 ```
 
 ### Local Development with LocalStack

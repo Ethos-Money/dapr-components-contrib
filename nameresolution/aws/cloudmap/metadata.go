@@ -15,8 +15,6 @@ package cloudmap
 
 import (
 	"errors"
-	"fmt"
-	"time"
 )
 
 type cloudMapMetadata struct {
@@ -31,36 +29,17 @@ type cloudMapMetadata struct {
 	NamespaceName string `json:"namespaceName"` // CloudMap namespace name
 	NamespaceID   string `json:"namespaceId"`   // Optional: CloudMap namespace ID (if name not provided)
 
-	// Optional Features
-	EnableCaching bool   `json:"enableCaching"` // Enable/disable address caching
-	CacheTTL      string `json:"cacheTTL"`      // Cache TTL duration (default: "60s")
-	MaxCacheSize  int    `json:"maxCacheSize"`  // Maximum number of cached entries (default: 1000)
-
 	// Dapr Configuration
 	DefaultDaprPort int `json:"defaultDaprPort"` // Default Dapr sidecar port if not specified in instance attributes
 }
 
 const (
-	defaultCacheTTL     = time.Second * 60
-	defaultMaxCacheSize = 1000
-	defaultDaprPort     = 3500
+	defaultDaprPort = 50002
 )
 
 func (m *cloudMapMetadata) Validate() error {
 	if m.NamespaceName == "" && m.NamespaceID == "" {
 		return errors.New("either namespaceName or namespaceId must be provided")
-	}
-
-	if m.EnableCaching {
-		if m.CacheTTL == "" {
-			m.CacheTTL = "60s"
-		}
-		if _, err := time.ParseDuration(m.CacheTTL); err != nil {
-			return fmt.Errorf("invalid cacheTTL format: %w", err)
-		}
-		if m.MaxCacheSize <= 0 {
-			m.MaxCacheSize = defaultMaxCacheSize
-		}
 	}
 
 	return nil

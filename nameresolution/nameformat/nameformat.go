@@ -25,13 +25,16 @@ import (
 	kitmd "github.com/dapr/kit/metadata"
 )
 
+// NameFormatResolver implements a name resolution component that formats service names
+// according to a configurable pattern.
 type NameFormatResolver struct {
 	format string
 	logger logger.Logger
 }
 
+// nameFormatMetadata defines the metadata properties for the name format resolver.
 type nameFormatMetadata struct {
-	Format string `mapstructure:"format"`
+	Format string `mapstructure:"format" description:"Format string for name resolution. Must contain {appid} placeholder."`
 }
 
 // NewResolver creates a new Name Format resolver.
@@ -41,6 +44,7 @@ func NewResolver(logger logger.Logger) nr.Resolver {
 	}
 }
 
+// Init initializes the name format resolver with the given metadata.
 func (r *NameFormatResolver) Init(ctx context.Context, metadata nr.Metadata) error {
 	var meta nameFormatMetadata
 	err := kitmd.DecodeMetadata(metadata.Configuration, &meta)
@@ -59,10 +63,12 @@ func (r *NameFormatResolver) Init(ctx context.Context, metadata nr.Metadata) err
 
 	// Store the format string
 	r.format = meta.Format
+	r.logger.Debugf("Initialized with format: %s", r.format)
 
 	return nil
 }
 
+// ResolveID resolves a service ID to an address using the configured format.
 func (r *NameFormatResolver) ResolveID(ctx context.Context, req nr.ResolveRequest) (string, error) {
 	if req.ID == "" {
 		return "", fmt.Errorf("empty ID not allowed")
@@ -79,9 +85,9 @@ func (r *NameFormatResolver) Close() error {
 	return nil
 }
 
-// GetComponentMetadata returns the metadata of the component
-func (r *NameFormatResolver) GetComponentMetadata() (metadataInfo metadata.MetadataMap) {
-	metadataStruct := nameFormatMetadata{}
-	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(metadataStruct), &metadataInfo, metadata.NameResolutionType)
-	return
+// GetComponentMetadata returns the metadata information for the component.
+func (r *NameFormatResolver) GetComponentMetadata() metadata.MetadataMap {
+	metadataInfo := metadata.MetadataMap{}
+	metadata.GetMetadataInfoFromStructType(reflect.TypeOf(nameFormatMetadata{}), &metadataInfo, metadata.NameResolutionType)
+	return metadataInfo
 }

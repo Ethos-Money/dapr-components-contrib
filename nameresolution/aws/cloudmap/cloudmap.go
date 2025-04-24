@@ -111,10 +111,10 @@ func (r *Resolver) ResolveID(ctx context.Context, req nameresolution.ResolveRequ
 		return "", err
 	}
 	if len(addresses) == 0 {
-		return "", fmt.Errorf("no instances found for service %s", req.ID)
+		return "", fmt.Errorf("no healthy instances found for service %s", req.ID)
 	}
 
-	// pick a random address for load balancing
+	// Pick a random address for load balancing
 	return addresses[rand.Intn(len(addresses))], nil
 }
 
@@ -131,8 +131,7 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		HealthStatus:  aws.String(servicediscovery.HealthStatusHealthy),
 	}
 
-	r.logger.Debugf("Discovering instances in CloudMap with input: namespace=%s, service=%s, healthStatus=%s",
-		*input.NamespaceName, *input.ServiceName, *input.HealthStatus)
+	r.logger.Debugf("Discovering instances in CloudMap: namespace=%s service=%s", *input.NamespaceName, *input.ServiceName)
 
 	// Call CloudMap API
 	result, err := r.client.DiscoverInstancesWithContext(ctx, input)
@@ -140,13 +139,13 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		return nil, fmt.Errorf("failed to discover CloudMap instances: %w", err)
 	}
 
-	r.logger.Debugf("Raw CloudMap response: found %d instances for service %s", len(result.Instances), req.ID)
+	r.logger.Debugf("Found %d instances for service %s", len(result.Instances), req.ID)
 
 	// Extract addresses from instances
 	addresses := make([]string, 0, len(result.Instances))
 	for _, instance := range result.Instances {
 		if instance.InstanceId == nil || instance.Attributes == nil {
-			r.logger.Warnf("Skipping CloudMap instance with nil ID or attributes")
+			r.logger.Warnf("Skipping instance with nil ID or attributes")
 			continue
 		}
 
@@ -154,42 +153,33 @@ func (r *Resolver) resolveIDMulti(ctx context.Context, req nameresolution.Resolv
 		var addr string
 		if ipv4, ok := instance.Attributes["AWS_INSTANCE_IPV4"]; ok && ipv4 != nil {
 			addr = *ipv4
-			r.logger.Debugf("Found CloudMap instance %s with IPv4: %s", *instance.InstanceId, addr)
 		} else if ipv6, ok := instance.Attributes["AWS_INSTANCE_IPV6"]; ok && ipv6 != nil {
 			addr = *ipv6
-			r.logger.Debugf("Found CloudMap instance %s with IPv6: %s", *instance.InstanceId, addr)
 		} else if cname, ok := instance.Attributes["AWS_INSTANCE_CNAME"]; ok && cname != nil {
 			addr = *cname
-			r.logger.Debugf("Found CloudMap instance %s with CNAME: %s", *instance.InstanceId, addr)
 		} else {
-			r.logger.Warnf("Skipping CloudMap instance %s with no valid address attributes", *instance.InstanceId)
+			r.logger.Warnf("Instance %s has no valid address attributes", *instance.InstanceId)
 			continue
 		}
 
-		// First try to get port from DAPR_PORT attribute
-		var port int
+		// Get port from DAPR_PORT attribute or use default
+		port := r.defaultDaprPort
 		if daprPort, ok := instance.Attributes["DAPR_PORT"]; ok && daprPort != nil {
-			r.logger.Debugf("Found DAPR_PORT attribute for instance %s: %s", *instance.InstanceId, *daprPort)
-			port = r.defaultDaprPort // Set default in case of parsing error
 			if p, err := strconv.Atoi(*daprPort); err == nil {
 				port = p
 			} else {
 				r.logger.Warnf("Invalid DAPR_PORT value for instance %s: %s, using default port %d", *instance.InstanceId, *daprPort, r.defaultDaprPort)
 			}
-		} else {
-			// Use default port if DAPR_PORT not found
-			port = r.defaultDaprPort
-			r.logger.Debugf("No DAPR_PORT found for instance %s, using default port %d", *instance.InstanceId, port)
 		}
 
 		addr = fmt.Sprintf("%s:%d", addr, port)
 		addresses = append(addresses, addr)
 	}
 
-	r.logger.Debugf("Final resolved CloudMap addresses for service %s: %v", req.ID, addresses)
-
 	if len(addresses) == 0 {
-		r.logger.Warnf("No CloudMap addresses found for service %s - this could indicate that no healthy instances exist, or instances are missing required attributes", req.ID)
+		r.logger.Warnf("No healthy instances found for service %s", req.ID)
+	} else {
+		r.logger.Debugf("Resolved addresses for service %s: %v", req.ID, addresses)
 	}
 
 	return addresses, nil
@@ -212,7 +202,7 @@ func (r *Resolver) validateAccess(ctx context.Context) error {
 		}
 		result, err := r.client.GetNamespaceWithContext(ctx, input)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get namespace with ID %s: %w", r.namespaceID, err)
 		}
 		if result.Namespace != nil && result.Namespace.Name != nil {
 			r.namespaceName = *result.Namespace.Name
@@ -229,12 +219,11 @@ func (r *Resolver) validateAccess(ctx context.Context) error {
 	input := &servicediscovery.ListNamespacesInput{}
 	result, err := r.client.ListNamespacesWithContext(ctx, input)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list namespaces: %w", err)
 	}
 
 	for _, ns := range result.Namespaces {
 		if ns.Name != nil && *ns.Name == r.namespaceName {
-			// Store the namespace ID for future use if needed
 			if ns.Id != nil {
 				r.namespaceID = *ns.Id
 			}
@@ -242,9 +231,4 @@ func (r *Resolver) validateAccess(ctx context.Context) error {
 		}
 	}
 	return fmt.Errorf("namespace not found: %s", r.namespaceName)
-}
-
-// Helper function to get pointer to string
-func ptr(s string) *string {
-	return &s
 }

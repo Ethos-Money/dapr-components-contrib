@@ -62,7 +62,9 @@ func (r *DomainSuffixResolver) ResolveID(ctx context.Context, req nr.ResolveRequ
 		return "", fmt.Errorf("empty ID not allowed")
 	}
 
-	return fmt.Sprintf("%s%s", req.ID, r.domainSuffix), nil
+	resolvedAddress := fmt.Sprintf("%s%s", req.ID, r.domainSuffix)
+	r.logger.Debugf("Resolved app ID '%s' to address: %s", req.ID, resolvedAddress)
+	return resolvedAddress, nil
 }
 
 // Close implements io.Closer
